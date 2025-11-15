@@ -553,34 +553,39 @@ class MainWindow(tk.Tk):
         control_section = ttk.LabelFrame(parent, text="Contrôles locaux", style="Card.TLabelframe")
         control_section.grid(row=1, column=0, sticky="ew", pady=(12, 0))
 
-        # Arrow buttons
+        # Stepper buttons (left/right only)
         arrow_frame = ttk.Frame(control_section, style="Card.TFrame")
         arrow_frame.grid(row=0, column=0, padx=6, pady=6)
         button_opts = {
-            "width": 4,
+            "width": 5,
             "style": "Toggle.TButton",
         }
-        ttk.Button(arrow_frame, text="▲", command=lambda: self.send_nano_move(+10), **button_opts).grid(row=0, column=1, padx=2, pady=2)
-        ttk.Button(arrow_frame, text="▼", command=lambda: self.send_nano_move(-10), **button_opts).grid(row=2, column=1, padx=2, pady=2)
-        ttk.Button(arrow_frame, text="◀", command=lambda: self.send_nano_move(-10, axis="x"), **button_opts).grid(row=1, column=0, padx=2, pady=2)
-        ttk.Button(arrow_frame, text="▶", command=lambda: self.send_nano_move(+10, axis="x"), **button_opts).grid(row=1, column=2, padx=2, pady=2)
+        ttk.Button(arrow_frame, text="◀", command=lambda: self.send_nano_move(-1), **button_opts).grid(row=0, column=0, padx=4, pady=2)
+        ttk.Button(arrow_frame, text="▶", command=lambda: self.send_nano_move(+1), **button_opts).grid(row=0, column=1, padx=4, pady=2)
 
         # Delta controls
         inc_frame = ttk.Frame(control_section, style="Card.TFrame")
         inc_frame.grid(row=1, column=0, sticky="w", padx=6, pady=(0, 8))
-        ttk.Label(inc_frame, text="ΔX:", style="Muted.TLabel").grid(row=0, column=0, padx=(0, 6))
-        self.delta_x = tk.IntVar(value=10)
+        ttk.Label(inc_frame, text="Δ pas:", style="Muted.TLabel").grid(row=0, column=0, padx=(0, 6))
+        self.jog_delta = tk.IntVar(value=10)
         ttk.Button(inc_frame, text="-10", command=lambda: self.set_delta(-10), style="Toggle.TButton").grid(row=0, column=1, padx=2)
         ttk.Button(inc_frame, text="-1", command=lambda: self.set_delta(-1), style="Toggle.TButton").grid(row=0, column=2, padx=2)
         ttk.Button(inc_frame, text="+1", command=lambda: self.set_delta(1), style="Toggle.TButton").grid(row=0, column=3, padx=2)
         ttk.Button(inc_frame, text="+10", command=lambda: self.set_delta(10), style="Toggle.TButton").grid(row=0, column=4, padx=2)
-        ttk.Label(inc_frame, textvariable=self.delta_x, style="Heading.TLabel").grid(row=0, column=5, padx=(8, 0))
+        ttk.Label(inc_frame, textvariable=self.jog_delta, style="Heading.TLabel").grid(row=0, column=5, padx=(8, 0))
+
+        speed_frame = ttk.Frame(control_section, style="Card.TFrame")
+        speed_frame.grid(row=2, column=0, sticky="ew", padx=6, pady=(0, 8))
+        ttk.Label(speed_frame, text="Vitesse moteur pas à pas", style="Muted.TLabel").grid(row=0, column=0, sticky="w")
+        self.stepper_speed_var = tk.StringVar(value="200")
+        ttk.Entry(speed_frame, textvariable=self.stepper_speed_var, width=8).grid(row=0, column=1, padx=(8, 0))
 
         servo_frame = ttk.LabelFrame(control_section, text="Servos", style="Card.TLabelframe")
-        servo_frame.grid(row=2, column=0, sticky="ew", padx=6, pady=6)
+        servo_frame.grid(row=3, column=0, sticky="ew", padx=6, pady=6)
         servo_frame.columnconfigure(1, weight=1)
 
         self.servo_vars = [tk.IntVar(value=90) for _ in range(3)]
+        servo_button_opts = {"width": 3, "style": "Toggle.TButton"}
         for idx in range(3):
             ttk.Label(servo_frame, text=f"S{idx}", style="Muted.TLabel").grid(row=idx, column=0, sticky="e", padx=4, pady=4)
             scale = ttk.Scale(
@@ -592,9 +597,24 @@ class MainWindow(tk.Tk):
                 style="Horizontal.TScale",
             )
             scale.grid(row=idx, column=1, sticky="ew", padx=6)
+            ttk.Button(
+                servo_frame,
+                text="▲",
+                command=lambda i=idx: self.jog_servo(i, +5),
+                **servo_button_opts,
+            ).grid(row=idx, column=2, padx=2, pady=2)
+            ttk.Button(
+                servo_frame,
+                text="▼",
+                command=lambda i=idx: self.jog_servo(i, -5),
+                **servo_button_opts,
+            ).grid(row=idx, column=3, padx=2, pady=2)
 
         self.speed_var = tk.IntVar(value=60)
-        ttk.Label(servo_frame, text="Vitesse °/s", style="Muted.TLabel").grid(row=3, column=0, sticky="e", padx=4, pady=4)
+        self.servo_speed_value = tk.StringVar()
+        self.speed_var.trace_add("write", self._update_servo_speed_label)
+        self._update_servo_speed_label()
+        ttk.Label(servo_frame, text="Vitesse servo (°/s)", style="Muted.TLabel").grid(row=3, column=0, sticky="e", padx=4, pady=4)
         ttk.Scale(
             servo_frame,
             from_=1,
@@ -603,8 +623,9 @@ class MainWindow(tk.Tk):
             variable=self.speed_var,
             style="Horizontal.TScale",
         ).grid(row=3, column=1, sticky="ew", padx=6)
+        ttk.Label(servo_frame, textvariable=self.servo_speed_value, style="Heading.TLabel").grid(row=3, column=2, columnspan=2, padx=4)
 
-        ttk.Button(servo_frame, text="Envoyer position", command=self.send_current_servo_pos, style="Accent.TButton").grid(row=4, column=0, columnspan=2, pady=(10, 4))
+        ttk.Button(servo_frame, text="Envoyer position", command=self.send_current_servo_pos, style="Accent.TButton").grid(row=4, column=0, columnspan=4, pady=(10, 4))
 
     def _build_center(self, parent: ttk.Frame) -> None:
         parent.rowconfigure(1, weight=1)
@@ -905,16 +926,41 @@ class MainWindow(tk.Tk):
         self.arm.send("M400")
 
     def set_delta(self, value: int) -> None:
-        self.delta_x.set(value)
+        self.jog_delta.set(value)
 
-    def send_nano_move(self, delta: int, axis: str = "y") -> None:
-        dx = self.delta_x.get()
-        value = -abs(dx) if delta < 0 else abs(dx)
-        axis = axis.lower()
-        if axis not in {"x", "y", "z"}:
-            axis = "y"
-        cmd = f"R1 g0 {axis}{value} s200"
+    def jog_servo(self, servo_index: int, delta: int) -> None:
+        if not 0 <= servo_index < len(self.servo_vars):
+            return
+        current = self.servo_vars[servo_index].get()
+        new_value = max(0, min(180, current + delta))
+        self.servo_vars[servo_index].set(new_value)
+
+    def send_nano_move(self, delta: int) -> None:
+        step_value = max(1, abs(self.jog_delta.get()))
+        move = -step_value if delta < 0 else step_value
+        speed = self._get_stepper_speed()
+        cmd = f"R1 g0 x{move} s{speed}"
         self.arm.send(cmd)
+
+    def _update_servo_speed_label(self, *_: object) -> None:
+        self.servo_speed_value.set(f"{self.speed_var.get()}°/s")
+
+    def _get_stepper_speed(self) -> int:
+        default_speed = 200
+        raw_value = self.stepper_speed_var.get().strip()
+        invalid = False
+        try:
+            speed = int(raw_value)
+        except ValueError:
+            speed = default_speed
+            invalid = True
+        if speed <= 0:
+            speed = default_speed
+            invalid = True
+        if invalid:
+            self.append_console("Vitesse moteur pas à pas invalide, utilisation 200.")
+            self.stepper_speed_var.set(str(default_speed))
+        return speed
 
     # ----------------------------------------------------------- console ---
 
