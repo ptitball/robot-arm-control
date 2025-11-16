@@ -553,41 +553,44 @@ class MainWindow(tk.Tk):
         control_section = ttk.LabelFrame(parent, text="Contrôles locaux", style="Card.TLabelframe")
         control_section.grid(row=1, column=0, sticky="ew", pady=(12, 0))
 
-        # Stepper buttons (left/right only)
-        arrow_frame = ttk.Frame(control_section, style="Card.TFrame")
-        arrow_frame.grid(row=0, column=0, padx=6, pady=6)
-        button_opts = {
-            "width": 5,
-            "style": "Toggle.TButton",
-        }
-        ttk.Button(arrow_frame, text="◀", command=lambda: self.send_nano_move(-1), **button_opts).grid(row=0, column=0, padx=4, pady=2)
-        ttk.Button(arrow_frame, text="▶", command=lambda: self.send_nano_move(+1), **button_opts).grid(row=0, column=1, padx=4, pady=2)
-
-        # Delta controls
+        # Delta controls for stepper
         inc_frame = ttk.Frame(control_section, style="Card.TFrame")
-        inc_frame.grid(row=1, column=0, sticky="w", padx=6, pady=(0, 8))
-        ttk.Label(inc_frame, text="Δ pas:", style="Muted.TLabel").grid(row=0, column=0, padx=(0, 6))
-        self.jog_delta = tk.IntVar(value=10)
-        ttk.Button(inc_frame, text="-10", command=lambda: self.set_delta(-10), style="Toggle.TButton").grid(row=0, column=1, padx=2)
-        ttk.Button(inc_frame, text="-1", command=lambda: self.set_delta(-1), style="Toggle.TButton").grid(row=0, column=2, padx=2)
-        ttk.Button(inc_frame, text="+1", command=lambda: self.set_delta(1), style="Toggle.TButton").grid(row=0, column=3, padx=2)
-        ttk.Button(inc_frame, text="+10", command=lambda: self.set_delta(10), style="Toggle.TButton").grid(row=0, column=4, padx=2)
-        ttk.Label(inc_frame, textvariable=self.jog_delta, style="Heading.TLabel").grid(row=0, column=5, padx=(8, 0))
+        inc_frame.grid(row=0, column=0, sticky="w", padx=6, pady=(0, 8))
+        ttk.Label(inc_frame, text="Δ pas (stepper):", style="Muted.TLabel").grid(row=0, column=0, padx=(0, 6))
+        self.jog_delta_var = tk.StringVar(value="10")
+        ttk.Entry(inc_frame, textvariable=self.jog_delta_var, width=6).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(inc_frame, text="-10", command=lambda: self.set_delta(-10), style="Toggle.TButton").grid(row=0, column=2, padx=2)
+        ttk.Button(inc_frame, text="-1", command=lambda: self.set_delta(-1), style="Toggle.TButton").grid(row=0, column=3, padx=2)
+        ttk.Button(inc_frame, text="+1", command=lambda: self.set_delta(1), style="Toggle.TButton").grid(row=0, column=4, padx=2)
+        ttk.Button(inc_frame, text="+10", command=lambda: self.set_delta(10), style="Toggle.TButton").grid(row=0, column=5, padx=2)
 
         speed_frame = ttk.Frame(control_section, style="Card.TFrame")
-        speed_frame.grid(row=2, column=0, sticky="ew", padx=6, pady=(0, 8))
+        speed_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 8))
         ttk.Label(speed_frame, text="Vitesse moteur pas à pas", style="Muted.TLabel").grid(row=0, column=0, sticky="w")
         self.stepper_speed_var = tk.StringVar(value="200")
         ttk.Entry(speed_frame, textvariable=self.stepper_speed_var, width=8).grid(row=0, column=1, padx=(8, 0))
 
         servo_frame = ttk.LabelFrame(control_section, text="Servos", style="Card.TLabelframe")
-        servo_frame.grid(row=3, column=0, sticky="ew", padx=6, pady=6)
-        servo_frame.columnconfigure(1, weight=1)
+        servo_frame.grid(row=2, column=0, sticky="ew", padx=6, pady=6)
+        for col in (2,):
+            servo_frame.columnconfigure(col, weight=1)
+
+        button_opts = {
+            "width": 4,
+            "style": "Toggle.TButton",
+        }
+
+        ttk.Button(servo_frame, text="◀", command=lambda: self.send_nano_move(-1), **button_opts).grid(row=1, column=0, rowspan=3, padx=4, pady=4, sticky="ns")
+        ttk.Button(servo_frame, text="▶", command=lambda: self.send_nano_move(+1), **button_opts).grid(row=1, column=7, rowspan=3, padx=4, pady=4, sticky="ns")
+
+        ttk.Label(servo_frame, text="Δ°", style="Muted.TLabel").grid(row=0, column=3, padx=4)
+        ttk.Label(servo_frame, text="Vitesse", style="Muted.TLabel").grid(row=0, column=4, padx=4)
 
         self.servo_vars = [tk.IntVar(value=90) for _ in range(3)]
-        servo_button_opts = {"width": 3, "style": "Toggle.TButton"}
+        self.servo_step_vars = [tk.StringVar(value="5") for _ in range(3)]
+        self.servo_speed_vars = [tk.StringVar(value="60") for _ in range(3)]
         for idx in range(3):
-            ttk.Label(servo_frame, text=f"S{idx}", style="Muted.TLabel").grid(row=idx, column=0, sticky="e", padx=4, pady=4)
+            ttk.Label(servo_frame, text=f"S{idx}", style="Muted.TLabel").grid(row=idx + 1, column=1, sticky="e", padx=4, pady=4)
             scale = ttk.Scale(
                 servo_frame,
                 from_=0,
@@ -596,25 +599,27 @@ class MainWindow(tk.Tk):
                 variable=self.servo_vars[idx],
                 style="Horizontal.TScale",
             )
-            scale.grid(row=idx, column=1, sticky="ew", padx=6)
+            scale.grid(row=idx + 1, column=2, sticky="ew", padx=6)
+            ttk.Entry(servo_frame, textvariable=self.servo_step_vars[idx], width=5).grid(row=idx + 1, column=3, padx=4)
+            ttk.Entry(servo_frame, textvariable=self.servo_speed_vars[idx], width=6).grid(row=idx + 1, column=4, padx=4)
             ttk.Button(
                 servo_frame,
                 text="▲",
-                command=lambda i=idx: self.jog_servo(i, +5),
-                **servo_button_opts,
-            ).grid(row=idx, column=2, padx=2, pady=2)
+                command=lambda i=idx: self.jog_servo(i, +1),
+                **button_opts,
+            ).grid(row=idx + 1, column=5, padx=2, pady=2)
             ttk.Button(
                 servo_frame,
                 text="▼",
-                command=lambda i=idx: self.jog_servo(i, -5),
-                **servo_button_opts,
-            ).grid(row=idx, column=3, padx=2, pady=2)
+                command=lambda i=idx: self.jog_servo(i, -1),
+                **button_opts,
+            ).grid(row=idx + 1, column=6, padx=2, pady=2)
 
         self.speed_var = tk.IntVar(value=60)
         self.servo_speed_value = tk.StringVar()
         self.speed_var.trace_add("write", self._update_servo_speed_label)
         self._update_servo_speed_label()
-        ttk.Label(servo_frame, text="Vitesse servo (°/s)", style="Muted.TLabel").grid(row=3, column=0, sticky="e", padx=4, pady=4)
+        ttk.Label(servo_frame, text="Vitesse servo par défaut (°/s)", style="Muted.TLabel").grid(row=4, column=1, sticky="e", padx=4, pady=4)
         ttk.Scale(
             servo_frame,
             from_=1,
@@ -622,10 +627,10 @@ class MainWindow(tk.Tk):
             orient="horizontal",
             variable=self.speed_var,
             style="Horizontal.TScale",
-        ).grid(row=3, column=1, sticky="ew", padx=6)
-        ttk.Label(servo_frame, textvariable=self.servo_speed_value, style="Heading.TLabel").grid(row=3, column=2, columnspan=2, padx=4)
+        ).grid(row=4, column=2, sticky="ew", padx=6)
+        ttk.Label(servo_frame, textvariable=self.servo_speed_value, style="Heading.TLabel").grid(row=4, column=3, columnspan=2, padx=4)
 
-        ttk.Button(servo_frame, text="Envoyer position", command=self.send_current_servo_pos, style="Accent.TButton").grid(row=4, column=0, columnspan=4, pady=(10, 4))
+        ttk.Button(servo_frame, text="Envoyer position", command=self.send_current_servo_pos, style="Accent.TButton").grid(row=5, column=0, columnspan=8, pady=(10, 4))
 
     def _build_center(self, parent: ttk.Frame) -> None:
         parent.rowconfigure(1, weight=1)
@@ -917,26 +922,31 @@ class MainWindow(tk.Tk):
         s0 = self.servo_vars[0].get()
         s1 = self.servo_vars[1].get()
         s2 = self.servo_vars[2].get()
-        speed = self.speed_var.get()
+        speeds = [
+            self._get_servo_speed(0),
+            self._get_servo_speed(1),
+            self._get_servo_speed(2),
+        ]
         self.arm.send("M279")
-        self.arm.send(f"M280 P0 S{s0} V{speed}")
-        self.arm.send(f"M280 P1 S{s1} V{speed}")
-        self.arm.send(f"M280 P2 S{s2} V{speed}")
+        self.arm.send(f"M280 P0 S{s0} V{speeds[0]}")
+        self.arm.send(f"M280 P1 S{s1} V{speeds[1]}")
+        self.arm.send(f"M280 P2 S{s2} V{speeds[2]}")
         self.arm.send("M278")
         self.arm.send("M400")
 
     def set_delta(self, value: int) -> None:
-        self.jog_delta.set(value)
+        self.jog_delta_var.set(str(value))
 
     def jog_servo(self, servo_index: int, delta: int) -> None:
         if not 0 <= servo_index < len(self.servo_vars):
             return
+        step = self._get_servo_delta(servo_index)
         current = self.servo_vars[servo_index].get()
-        new_value = max(0, min(180, current + delta))
+        new_value = max(0, min(180, current + (step * delta)))
         self.servo_vars[servo_index].set(new_value)
 
     def send_nano_move(self, delta: int) -> None:
-        step_value = max(1, abs(self.jog_delta.get()))
+        step_value = max(1, abs(self._get_stepper_delta()))
         move = -step_value if delta < 0 else step_value
         speed = self._get_stepper_speed()
         cmd = f"R1 g0 x{move} s{speed}"
@@ -960,6 +970,57 @@ class MainWindow(tk.Tk):
         if invalid:
             self.append_console("Vitesse moteur pas à pas invalide, utilisation 200.")
             self.stepper_speed_var.set(str(default_speed))
+        return speed
+
+    def _get_stepper_delta(self) -> int:
+        default_delta = 10
+        raw_value = self.jog_delta_var.get().strip()
+        invalid = False
+        try:
+            delta = int(raw_value)
+        except ValueError:
+            delta = default_delta
+            invalid = True
+        if delta == 0:
+            delta = default_delta
+            invalid = True
+        if invalid:
+            self.append_console("Δ pas stepper invalide, utilisation 10.")
+            self.jog_delta_var.set(str(default_delta))
+        return delta
+
+    def _get_servo_delta(self, servo_index: int) -> int:
+        default_delta = 5
+        raw_value = self.servo_step_vars[servo_index].get().strip()
+        invalid = False
+        try:
+            delta = int(raw_value)
+        except ValueError:
+            delta = default_delta
+            invalid = True
+        if delta <= 0:
+            delta = default_delta
+            invalid = True
+        if invalid:
+            self.append_console(f"Δ° invalide pour S{servo_index}, utilisation 5.")
+            self.servo_step_vars[servo_index].set(str(default_delta))
+        return delta
+
+    def _get_servo_speed(self, servo_index: int) -> int:
+        default_speed = self.speed_var.get()
+        raw_value = self.servo_speed_vars[servo_index].get().strip()
+        invalid = False
+        try:
+            speed = int(raw_value)
+        except ValueError:
+            speed = default_speed
+            invalid = True
+        if speed <= 0:
+            speed = default_speed
+            invalid = True
+        if invalid:
+            self.append_console(f"Vitesse invalide pour S{servo_index}, utilisation {default_speed}.")
+            self.servo_speed_vars[servo_index].set(str(default_speed))
         return speed
 
     # ----------------------------------------------------------- console ---
